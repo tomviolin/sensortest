@@ -19,6 +19,8 @@ import android.content.Context;
 
 import android.hardware.SensorManager;
 
+WebsocketClient wsc;
+
 KetaiSensor sensor;
 
 int fr = 50;
@@ -54,13 +56,17 @@ void setup(){
     timings[i]=5;
     amplitudes[i]=0;
   }
-  for ( int i = 50; i < 200; i+=200 ) {
-    for (int j = 0; j < 30; ++j){
+  for ( int i = 0; i < 200; i+=200 ) {
+    for (int j = 0; j < 15; ++j){
       amplitudes[i+j]=1;
+    }
+    for (int j = 185; j < 200; ++j) {
+      amplitudes[i+j] = 1;
     }
   }
   //  else
   //  vib.vibrate(500);
+  wsc = new WebsocketClient(this, "ws://192.168.1.41:5000/");
 }
 boolean done=false;
 long lastframemillis=0;
@@ -68,6 +74,11 @@ long lastframemillis=0;
 
 long nextvibmillis=-10000;
 long lastvibmillis=-10000;
+
+float sensorRecord[] = new float[200];
+float sensorDetail[] = new float[200];
+int detailCount = 0;
+
 void draw(){
   long thisframemillis=millis();
   System.out.print(thisframemillis-lastframemillis);
@@ -78,13 +89,30 @@ void draw(){
     print(c-lastc);
   }
   lastc = c;
+  
   long thisvibmillis = millis();
   if (nextvibmillis < -9999) {
     nextvibmillis = thisvibmillis;
   }
   if (thisvibmillis >= nextvibmillis) {
+    // transmit sensor data
+    String json = "{\"data\":[";
+    for (int i = 0; i < 200; ++i) {
+      if (i > 0) json += ",";
+      json += sensorRecord[i];
+    }
+    json += "],\"timestamp\":"+thisvibmillis+"}";
+    wsc.sendMessage(json);
+      
     // new vib restart
+    stroke(255,255,0,160);
     line(0,c,width-1,c);
+    for ( int i = 0; i < 200; ++i) {
+      amplitudes[i] = 0;
+    }
+    for ( int k = 0; k < 200; ++k ){
+      amplitudes[int(random(200))]=1;
+    }
     vib.vibrate(VibrationEffect.createWaveform(timings,amplitudes,0));
     nextvibmillis += 1000;
     lastvibmillis = thisvibmillis;
@@ -92,8 +120,19 @@ void draw(){
   long millisintovib = thisvibmillis-lastvibmillis;
   point(millisintovib,c);
   if (amplitudes[int(millisintovib/5)]>0){
-    point(width/3,c);
+    stroke(0,255,0);
+    strokeWeight(10);
+    point(width/2,c);
+    stroke(255);
+    strokeWeight(1);
   }
+  sensorRecord[int(millisintovib/5)] = mean(sensorDetail, detailCount);
+  detailCount = 0;
+  stroke(255,128,0);
+  strokeWeight(4);
+  point(width/2 + sensorRecord[int(millisintovib/5)]*500,c);
+  stroke(255);
+  strokeWeight(1);
   System.out.println("");
 }
 int lastmillis=millis();
@@ -101,7 +140,7 @@ float kr = 1; // kalman ratio
 float kv=-10000.0;
 
 void onGyroscopeEvent(float gyro_x, float gyro_y, float gyro_z) {
-  if (kr < 200) kr += 0.2;
+  if (kr < 20) kr += 0.2;
   if (c==0) {
     background(0);
     clear();
@@ -123,6 +162,7 @@ void onGyroscopeEvent(float gyro_x, float gyro_y, float gyro_z) {
   lastmillis = thismillis;
   stroke(255,255,255);
   point(xcx,c);
+  sensorDetail[detailCount++] = gyro_z-kv;
   /*
   stroke(0,255,0);
   point(xcy%width,c%height);
@@ -146,4 +186,12 @@ void onGyroscopeEvent(float gyro_x, float gyro_y, float gyro_z) {
   */
   c++;
   c=c%height;
+}
+
+float mean(float[] x, int n) {
+  float total=0;
+  for (int i = 0; i < n; ++i) {
+    total += x[i];
+  }
+  return total / float(n);
 }
