@@ -52,21 +52,27 @@ void setup(){
   vib=vibman.getDefaultVibrator();
   timings = new long[200];
   amplitudes = new int[200];
-  for (int i = 0; i < 200; ++i) {
-    timings[i]=5;
+  for (int i = 0; i < 50; ++i) {
+    timings[i]=20;
     amplitudes[i]=0;
   }
-  for ( int i = 0; i < 200; i+=200 ) {
-    for (int j = 0; j < 15; ++j){
+  for ( int i = 0; i < 50; i+=50 ) {
+    for (int j = 0; j < 5; ++j){
       amplitudes[i+j]=1;
     }
-    for (int j = 185; j < 200; ++j) {
+    for (int j = 45; j < 50; ++j) {
       amplitudes[i+j] = 1;
     }
   }
   //  else
   //  vib.vibrate(500);
-  wsc = new WebsocketClient(this, "ws://192.168.1.41:5000/");
+  try {
+    wsc = new WebsocketClient(this, "ws://10.7.76.131:5000/");
+  } catch(Exception e) {
+    println("*** ERROR'"+e+"' CAUGHT!***");
+    e.printStackTrace();
+    println("after error.");
+  }
 }
 boolean done=false;
 long lastframemillis=0;
@@ -75,8 +81,10 @@ long lastframemillis=0;
 long nextvibmillis=-10000;
 long lastvibmillis=-10000;
 
-float sensorRecord[] = new float[200];
-float sensorDetail[] = new float[200];
+float sensorRecord[] = new float[50];
+float sensorMin[] = new float[50];
+float sensorMax[] = new float[50];
+float sensorDetail[] = new float[500];
 int detailCount = 0;
 
 void draw(){
@@ -94,43 +102,46 @@ void draw(){
   if (nextvibmillis < -9999) {
     nextvibmillis = thisvibmillis;
   }
-  if (thisvibmillis >= nextvibmillis) {
+  if (true || thisvibmillis >= nextvibmillis) {
     // transmit sensor data
     String json = "{\"data\":[";
-    for (int i = 0; i < 200; ++i) {
+    for (int i = 0; i < 50; ++i) {
       if (i > 0) json += ",";
-      json += sensorRecord[i];
+      json += "[" + sensorRecord[i] + "," + sensorMin[i]+","+sensorMax[i]+"]";
     }
     json += "],\"timestamp\":"+thisvibmillis+"}";
-    wsc.sendMessage(json);
+    if (wsc != null)
+      wsc.sendMessage(json);
       
     // new vib restart
     stroke(255,255,0,160);
     line(0,c,width-1,c);
-    for ( int i = 0; i < 200; ++i) {
+    for ( int i = 0; i < 50; ++i) {
       amplitudes[i] = 0;
     }
-    for ( int k = 0; k < 200; ++k ){
-      amplitudes[int(random(200))]=1;
+    for ( int k = 0; k < 50; ++k ){
+      amplitudes[int(random(50))]=1;
     }
     vib.vibrate(VibrationEffect.createWaveform(timings,amplitudes,0));
-    nextvibmillis += 1000;
+    nextvibmillis += 20;
     lastvibmillis = thisvibmillis;
   }
   long millisintovib = thisvibmillis-lastvibmillis;
   point(millisintovib,c);
-  if (amplitudes[int(millisintovib/5)]>0){
+  if (amplitudes[int(millisintovib/20)]>0){
     stroke(0,255,0);
     strokeWeight(10);
     point(width/2,c);
     stroke(255);
     strokeWeight(1);
   }
-  sensorRecord[int(millisintovib/5)] = mean(sensorDetail, detailCount);
+  sensorRecord[int(millisintovib/20)] = mean(sensorDetail, detailCount);
+  sensorMin[int(millisintovib/20)] = min(sensorDetail, detailCount);
+  sensorMax[int(millisintovib/20)] = max(sensorDetail, detailCount);
   detailCount = 0;
   stroke(255,128,0);
   strokeWeight(4);
-  point(width/2 + sensorRecord[int(millisintovib/5)]*500,c);
+  point(width/2 + sensorRecord[int(millisintovib/20)]*500,c);
   stroke(255);
   strokeWeight(1);
   System.out.println("");
@@ -194,4 +205,19 @@ float mean(float[] x, int n) {
     total += x[i];
   }
   return total / float(n);
+}
+
+float min(float[] x, int n) {
+  float minv=1e9;
+  for (int i = 0; i < n; ++i) {
+    minv = min(minv,x[i]);
+  }
+  return minv;
+}
+float max(float[] x, int n) {
+  float maxv=-1e9;
+  for (int i = 0; i < n; ++i) {
+    maxv = max(maxv,x[i]);
+  }
+  return maxv;
 }
